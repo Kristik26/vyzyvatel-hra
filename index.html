@@ -4,748 +4,904 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Vědomostní Výzva</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --card-border: #334155;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
-            /* Prevent pull-to-refresh on mobile */
-            overscroll-behavior-y: contain; 
-        }
-        .screen {
-            display: none;
-            animation: fadeIn 0.3s ease-in-out;
-        }
-        .screen.active {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100dvh;
             display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin: auto 0;
         }
-        .btn {
-            transition: all 0.2s;
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: var(--muted);
+            background: rgba(30, 41, 59, 0.7);
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--card-border);
         }
-        .btn:active {
-            transform: scale(0.95);
+
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+            margin-right: 6px;
         }
-        /* Custom scrollbar for player lists */
-        ::-webkit-scrollbar {
-            width: 6px;
+        .dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .dot.error { background: var(--danger); }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 24px 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
         }
-        ::-webkit-scrollbar-track {
-            background: #1e293b; 
+
+        h1 {
+            font-size: 1.7rem;
+            text-align: center;
+            background: linear-gradient(135deg, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
         }
-        ::-webkit-scrollbar-thumb {
-            background: #475569; 
-            border-radius: 10px;
+
+        h2 {
+            font-size: 1.25rem;
+            text-align: center;
         }
+
+        p.sub {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            background: #0f172a;
+            color: var(--text);
+            font-size: 1rem;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--primary);
+        }
+
+        .pin-input {
+            text-align: center;
+            font-size: 1.4rem;
+            letter-spacing: 6px;
+            font-weight: 700;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s, background 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: #334155;
+        }
+
+        button.danger-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            font-size: 0.9rem;
+            padding: 11px;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .divider:not(:empty)::before { margin-right: 12px; }
+        .divider:not(:empty)::after { margin-left: 12px; }
+
+        .pin-box {
+            background: #0f172a;
+            border: 2px dashed var(--primary);
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .pin-code {
+            font-size: 2.4rem;
+            font-weight: 900;
+            letter-spacing: 8px;
+            color: #818cf8;
+        }
+
+        .players-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .player-chip {
+            background: #0f172a;
+            border: 1px solid var(--card-border);
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .player-chip.answered {
+            border-color: var(--success);
+            background: rgba(34, 197, 94, 0.15);
+        }
+
+        .question-box {
+            background: #0f172a;
+            padding: 20px;
+            border-radius: 16px;
+            font-size: 1.15rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.4;
+            border: 1px solid var(--card-border);
+        }
+
+        .answers-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ans-btn {
+            text-align: left;
+            padding: 16px;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 2px solid transparent;
+        }
+
+        .ans-0 { background: #2563eb; }
+        .ans-1 { background: #d97706; }
+        .ans-2 { background: #059669; }
+        .ans-3 { background: #7c3aed; }
+
+        .ans-btn.selected {
+            border-color: white;
+            box-shadow: 0 0 15px rgba(255,255,255,0.3);
+        }
+
+        .leaderboard-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            background: #0f172a;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+        }
+
+        .leaderboard-row.me {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .hidden { display: none !important; }
     </style>
 </head>
-<body class="h-[100dvh] w-full flex justify-center overflow-hidden">
+<body>
 
-    <!-- Main Game Container (Mobile constrained width) -->
-    <div class="w-full max-w-md h-full bg-slate-900 shadow-2xl flex flex-col relative overflow-hidden">
-        
-        <!-- Header -->
-        <header class="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center z-10 shrink-0">
-            <h1 class="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-                🧠 VÝZVA
-            </h1>
-            <div id="header-room-code" class="hidden text-sm font-mono bg-slate-700 px-3 py-1 rounded-full text-slate-300">
-                PIN: <span id="room-pin-display" class="font-bold text-white tracking-widest"></span>
-            </div>
-        </header>
-
-        <!-- SCREEN 1: Login / Name Entry -->
-        <main id="screen-login" class="screen active flex-col items-center justify-center flex-1 p-6 z-0">
-            <div class="w-full max-w-sm space-y-6 text-center">
-                <div class="text-6xl mb-4">🏆</div>
-                <h2 class="text-2xl font-bold text-white">Vítejte ve hře!</h2>
-                <p class="text-slate-400 text-sm">Zadej svou přezdívku pro pokračování.</p>
-                
-                <input type="text" id="player-name" placeholder="Tvoje přezdívka..." maxlength="15"
-                    class="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 outline-none text-center text-lg font-semibold transition-all">
-                
-                <button onclick="app.setPlayerName()" class="btn w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-lg shadow-lg shadow-blue-600/30">
-                    Pokračovat
-                </button>
-            </div>
-        </main>
-
-        <!-- SCREEN 2: Menu (Create / Join) -->
-        <main id="screen-menu" class="screen flex-col items-center justify-center flex-1 p-6 space-y-8">
-            <div class="text-center w-full">
-                <h2 class="text-xl text-slate-300 mb-6">Ahoj, <span id="display-name" class="font-bold text-white"></span>!</h2>
-                
-                <div class="space-y-4">
-                    <button onclick="app.createRoom()" class="btn w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 font-bold text-lg shadow-lg shadow-purple-600/30 border border-purple-400/20">
-                        ✨ Vytvořit novou hru
-                    </button>
-                    
-                    <div class="relative flex items-center py-2">
-                        <div class="flex-grow border-t border-slate-700"></div>
-                        <span class="shrink-0 px-4 text-slate-500 text-sm">Nebo</span>
-                        <div class="flex-grow border-t border-slate-700"></div>
-                    </div>
-
-                    <div class="flex space-x-2">
-                        <input type="text" id="join-code" placeholder="Kód hry (4 písmena)" maxlength="4"
-                            class="flex-1 px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 focus:border-green-500 outline-none text-center text-xl font-mono uppercase transition-all">
-                        <button onclick="app.joinRoom()" class="btn px-6 rounded-xl bg-green-600 hover:bg-green-500 font-bold shadow-lg shadow-green-600/30">
-                            Připojit
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <!-- SCREEN 3: Lobby (Waiting Room) -->
-        <main id="screen-lobby" class="screen flex-col flex-1 p-4 flex flex-col">
-            <div class="bg-slate-800 rounded-2xl p-6 text-center border border-slate-700 mb-4 shadow-lg shrink-0">
-                <p class="text-slate-400 text-sm mb-1">Připoj se pomocí kódu:</p>
-                <h2 id="lobby-code" class="text-5xl font-mono font-black tracking-widest text-white mb-2"></h2>
-                <button onclick="app.copyCode()" class="text-blue-400 text-sm hover:text-blue-300 underline">Kopírovat kód</button>
-            </div>
-
-            <div class="flex-1 bg-slate-800/50 rounded-2xl border border-slate-700 p-4 flex flex-col overflow-hidden">
-                <h3 class="text-slate-300 font-semibold mb-3 flex justify-between">
-                    <span>Připojení hráči</span>
-                    <span id="player-count" class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">0</span>
-                </h3>
-                <ul id="players-list" class="space-y-2 overflow-y-auto flex-1 pr-2 pb-2">
-                    <!-- Players injected here -->
-                </ul>
-            </div>
-
-            <div class="mt-4 shrink-0">
-                <button onclick="app.startGame()" id="btn-start-game" class="btn w-full py-4 rounded-xl bg-green-600 hover:bg-green-500 font-bold text-lg shadow-lg shadow-green-600/30">
-                    🚀 Odstartovat hru
-                </button>
-                <p class="text-center text-xs text-slate-500 mt-2">Hru může odstartovat kdokoli, až budou všichni připraveni.</p>
-            </div>
-        </main>
-
-        <!-- SCREEN 4: Question -->
-        <main id="screen-question" class="screen flex-col flex-1 p-4 flex flex-col">
-            <div class="flex justify-between items-center mb-4 shrink-0">
-                <span class="bg-slate-800 text-slate-300 px-3 py-1 rounded-lg text-sm border border-slate-700">
-                    Otázka <span id="question-number" class="font-bold text-white">1</span>/<span id="total-questions">10</span>
-                </span>
-                <span class="bg-slate-800 text-slate-300 px-3 py-1 rounded-lg text-sm border border-slate-700 flex items-center">
-                    <span class="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
-                    <span id="answered-count">0</span> odpovědělo
-                </span>
-            </div>
-
-            <div class="flex-1 flex flex-col justify-center mb-6">
-                <h2 id="question-text" class="text-2xl md:text-3xl font-bold text-center leading-tight">
-                    <!-- Question text -->
-                </h2>
-            </div>
-
-            <div id="options-container" class="grid grid-cols-1 gap-3 shrink-0 pb-4">
-                <!-- Options injected here -->
-            </div>
-
-            <div id="waiting-others" class="hidden text-center p-4 bg-slate-800/80 rounded-xl border border-blue-500/30 text-blue-300 shrink-0">
-                <span class="inline-block animate-spin mr-2">⏳</span> Čekáme na ostatní...
-            </div>
-            
-            <!-- Force end round (if someone is AFK) -->
-             <div class="mt-2 text-center shrink-0">
-                <button onclick="app.endRoundForce()" class="text-xs text-slate-500 underline hover:text-slate-300 p-2">
-                    Ukončit kolo hned (přeskočit zbytek)
-                </button>
-            </div>
-        </main>
-
-        <!-- SCREEN 5: Round Results / Leaderboard -->
-        <main id="screen-results" class="screen flex-col flex-1 p-4 flex flex-col">
-            <h2 id="results-title" class="text-2xl font-bold text-center mb-6 mt-4 shrink-0">
-                Konec kola!
-            </h2>
-            
-            <div class="text-center mb-6 shrink-0" id="correct-answer-display">
-                <p class="text-slate-400 text-sm mb-1">Správná odpověd:</p>
-                <div class="bg-green-900/30 text-green-400 border border-green-700 rounded-xl p-3 font-bold text-lg inline-block">
-                    <!-- Correct answer text -->
-                </div>
-            </div>
-
-            <div class="flex-1 bg-slate-800/50 rounded-2xl border border-slate-700 p-4 flex flex-col overflow-hidden">
-                <h3 class="text-slate-300 font-semibold mb-3 flex justify-between items-center">
-                    <span>Průběžné skóre</span>
-                    <span class="text-xl">🏆</span>
-                </h3>
-                <ul id="scoreboard-list" class="space-y-3 overflow-y-auto flex-1 pr-2 pb-2">
-                    <!-- Leaderboard injected here -->
-                </ul>
-            </div>
-
-            <div class="mt-4 shrink-0">
-                <button onclick="app.nextRound()" id="btn-next-round" class="btn w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-lg shadow-lg shadow-blue-600/30">
-                    Další kolo ➔
-                </button>
-            </div>
-        </main>
-        
-        <!-- SCREEN 6: Final Results -->
-        <main id="screen-final" class="screen flex-col flex-1 p-6 flex flex-col items-center justify-center">
-            <h1 class="text-4xl font-black text-center mb-2 bg-clip-text text-transparent bg-gradient-to-r from-yellow-400 to-yellow-600">KONEC HRY</h1>
-            <p class="text-slate-400 mb-8">Konečné umístění</p>
-
-            <div class="w-full bg-slate-800 rounded-2xl border border-slate-700 p-2 mb-8" id="podium">
-                <!-- Final leaderboard -->
-            </div>
-
-            <button onclick="app.leaveRoom()" class="btn w-full py-4 rounded-xl bg-slate-700 hover:bg-slate-600 font-bold text-lg border border-slate-500">
-                Zpět do menu
-            </button>
-        </main>
-
-        <!-- Toast/Modal for messages (replaces alert) -->
-        <div id="toast" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-50 text-center text-sm font-semibold max-w-[90%] w-max">
-            Message
-        </div>
-
+<div class="container">
+    <div class="status-bar">
+        <div><span id="conn-dot" class="dot"></span><span id="conn-text">Připojování k serveru...</span></div>
+        <div id="room-badge" class="hidden">PIN: <strong id="badge-pin">----</strong></div>
     </div>
 
-    <!-- FIREBASE & APP LOGIC -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- OBRAZOVKA 1: MENU -->
+    <div id="screen-menu" class="card">
+        <h1>VĚDOMOSTNÍ VÝZVA</h1>
+        <p class="sub">Online kvíz pro 2 až 15+ hráčů (<span id="db-count">125</span> otázek)</p>
 
-        // Global config & app ID handling
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'vedomostni-vyzva-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            // Provide a mock structure to prevent crash if running outside the intended environment without config
-            apiKey: "mock", authDomain: "mock", projectId: "mock", storageBucket: "mock", messagingSenderId: "mock", appId: "mock"
-        };
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        <div>
+            <label style="font-size:0.85rem; color:var(--muted); display:block; margin-bottom:6px;">Tvoje přezdívka:</label>
+            <input type="text" id="player-name" placeholder="Např. Kristián" maxlength="16">
+        </div>
 
-        let appInstance, db, auth;
+        <button id="btn-create" onclick="createRoom()" disabled>Vytvořit novou hru</button>
+
+        <div class="divider">NEBO SE PŘIPOJ</div>
+
+        <input type="text" id="join-pin" class="pin-input" placeholder="PIN" maxlength="4" inputmode="numeric">
+        <button id="btn-join" class="secondary" onclick="joinRoom()" disabled>Připojit se ke hře</button>
+    </div>
+
+    <!-- OBRAZOVKA 2: LOBBY -->
+    <div id="screen-lobby" class="card hidden">
+        <h2>Čekárna hráčů</h2>
+        <div class="pin-box">
+            <div style="font-size:0.8rem; color:var(--muted); margin-bottom:4px;">KÓD MÍSTNOSTI PRO PŘÁTELE</div>
+            <div id="lobby-pin" class="pin-code">0000</div>
+        </div>
+
+        <div>
+            <label style="font-size:0.85rem; color:var(--muted); display:block; margin-bottom:6px;">Počet otázek ve hře:</label>
+            <select id="round-select" onchange="changeRoundsCount(this.value)">
+                <option value="10">10 otázek (Rychlá hra)</option>
+                <option value="15" selected>15 otázek (Standardní)</option>
+                <option value="25">25 otázek (Dlouhá výzva)</option>
+            </select>
+        </div>
+
+        <div>
+            <div style="font-size:0.9rem; color:var(--muted); margin-bottom:8px;">
+                Připojení hráči (<span id="lobby-count">0</span>):
+            </div>
+            <div id="lobby-players" class="players-grid"></div>
+        </div>
+
+        <button onclick="startGame()">Spustit hru pro všechny</button>
+        <button class="danger-btn" onclick="leaveRoom()">Opustit místnost</button>
+    </div>
+
+    <!-- OBRAZOVKA 3: OTÁZKA -->
+    <div id="screen-game" class="card hidden">
+        <div style="display:flex; justify-content:space-between; color:var(--muted); font-size:0.9rem;">
+            <span id="round-info">Kolo 1 / 15</span>
+            <span id="answered-info">Odpovědělo: 0 / 0</span>
+        </div>
+
+        <div id="question-text" class="question-box">Načítání otázky...</div>
+
+        <div id="answers-container" class="answers-grid"></div>
+
+        <div>
+            <div style="font-size:0.8rem; color:var(--muted); margin-bottom:6px;">Stav hráčů v tomto kole:</div>
+            <div id="game-players" class="players-grid"></div>
+        </div>
+
+        <button class="secondary" onclick="revealResults()" style="margin-top:8px; font-size:0.9rem; padding:12px;">
+            Vyhodnotit kolo hned (nečekat)
+        </button>
+    </div>
+
+    <!-- OBRAZOVKA 4: VÝSLEDKY KOLA / KONEC -->
+    <div id="screen-results" class="card hidden">
+        <h2 id="results-title">Výsledky kola</h2>
+        <div id="correct-answer-box" style="background:rgba(34,197,94,0.15); border:1px solid var(--success); padding:12px; border-radius:12px; text-align:center; font-size:0.95rem;">
+            Správná odpověď: <strong id="correct-answer-text">---</strong>
+        </div>
+
+        <div id="leaderboard" style="display:flex; flex-direction:column; gap:8px;"></div>
+
+        <button id="btn-next-round" onclick="nextRound()">Další otázka</button>
+        <button id="btn-new-game" class="hidden" onclick="restartGame()">Hrát znovu (nové otázky)</button>
+    </div>
+</div>
+
+<script>
+const QUESTIONS = [
+    // Věda, vesmír a příroda
+    { q: "Která planeta sluneční soustavy je nejblíže Slunci?", a: ["Venuše", "Merkur", "Mars", "Země"], c: 1 },
+    { q: "Kolik kostí má přibližně dospělý člověk?", a: ["156", "206", "256", "306"], c: 1 },
+    { q: "Jaká je chemická značka pro zlato?", a: ["Ag", "Gd", "Au", "Fe"], c: 2 },
+    { q: "Jaký plyn tvoří největší část zemské atmosféry (cca 78 %)?", a: ["Kyslík", "Oxid uhličitý", "Dusík", "Vodík"], c: 2 },
+    { q: "Jaká je přibližná rychlost světla ve vakuu?", a: ["300 000 km/s", "150 000 km/s", "30 000 km/s", "1 000 000 km/s"], c: 0 },
+    { q: "Který orgán v lidském těle produkuje inzulín?", a: ["Játra", "Slinivka břišní", "Ledviny", "Slezina"], c: 1 },
+    { q: "Který kov je za běžné pokojové teploty kapalný?", a: ["Olovo", "Rtuť", "Cín", "Zinek"], c: 1 },
+    { q: "Kolik stupňů má vnitřní součet úhlů v každém trojúhelníku?", a: ["90°", "180°", "270°", "360°"], c: 1 },
+    { q: "Jaká je chemická značka pro stříbro?", a: ["Si", "Sr", "Ag", "Au"], c: 2 },
+    { q: "Která planeta je ve sluneční soustavě největší?", a: ["Saturn", "Jupiter", "Neptun", "Uran"], c: 1 },
+    { q: "Při jaké teplotě (při běžném tlaku) vře voda na stupnici Fahrenheita?", a: ["100 °F", "180 °F", "212 °F", "273 °F"], c: 2 },
+    { q: "Který savec dokáže aktivně létat?", a: ["Poletucha", "Netopýr", "Pštros", "Tučňák"], c: 1 },
+    { q: "Jak se jmenuje nejtvrdší přírodní minerál?", a: ["Křemen", "Korund", "Diamant", "Topaz"], c: 2 },
+    { q: "Kolik srdcí má chobotnice?", a: ["1", "2", "3", "4"], c: 2 },
+    { q: "Která krevní skupina je považována za univerzálního dárce červených krvinek?", a: ["AB+", "A-", "0-", "B+"], c: 2 },
+    { q: "V jakých jednotkách se měří elektrický odpor?", a: ["Ampér", "Volt", "Watt", "Ohm"], c: 3 },
+    { q: "Jak se nazývá proces, při kterém rostliny přeměňují světlo na energii?", a: ["Destilace", "Fotosyntéza", "Osmóza", "Fermentace"], c: 1 },
+    { q: "Která kost v lidském těle je nejdelší a nejpevnější?", a: ["Holenní kost", "Pažní kost", "Stehenní kost", "Klíční kost"], c: 2 },
+    { q: "Jaká je hodnota pH čisté destilované vody?", a: ["0", "5", "7", "14"], c: 2 },
+    { q: "Který prvek má v periodické tabulce protonové číslo 1?", a: ["Helium", "Kyslík", "Vodík", "Uhlík"], c: 2 },
+    { q: "Jak se nazývá nejbližší hvězda k Zemi hned po Slunci?", a: ["Sírius", "Alfa Centauri A", "Proxima Centauri", "Betelgeuse"], c: 2 },
+    { q: "Kolik zubů má standardně plný chrup dospělého člověka (včetně zubů moudrosti)?", a: ["28", "30", "32", "36"], c: 2 },
+    { q: "Který plyn dává perlivým nápojům bublinky?", a: ["Dusík", "Oxid uhličitý", "Oxid uhelnatý", "Metan"], c: 1 },
+    { q: "Jaký přístroj se používá k měření atmosférického tlaku?", a: ["Anemometr", "Hygrometr", "Barometr", "Seismograf"], c: 2 },
+    { q: "Jaké zvíře je největším žijícím živočichem na Zemi?", a: ["Slon africký", "Plejtvák obrovský", "Žralok obrovský", "Vorvaň obrovský"], c: 1 },
+
+    // Zeměpis a svět
+    { q: "Které město je hlavním městem Austrálie?", a: ["Sydney", "Melbourne", "Canberra", "Perth"], c: 2 },
+    { q: "Který oceán je rozlohou největší na světě?", a: ["Atlantský", "Indický", "Tichý", "Severní ledový"], c: 2 },
+    { q: "Jaká měna se používá ve Švýcarsku?", a: ["Euro", "Švýcarská koruna", "Švýcarský frank", "Libra"], c: 2 },
+    { q: "Jaké je hlavní město Kanady?", a: ["Toronto", "Vancouver", "Montreal", "Ottawa"], c: 3 },
+    { q: "Která řeka je podle průtoku a povodí největší na světě?", a: ["Nil", "Amazonka", "Mississippi", "Jang-c’-ťiang"], c: 1 },
+    { q: "Ve které zemi se nachází historické město Petra vytesané do skal?", a: ["Egypt", "Jordánsko", "Sýrie", "Maroko"], c: 1 },
+    { q: "Který stát je rozlohou nejmenší na světě?", a: ["Monako", "San Marino", "Vatikán", "Lichtenštejnsko"], c: 2 },
+    { q: "Jak se jmenuje nejhlubší místo na Zemi?", a: ["Mariánský příkop", "Jávský příkop", "Tonga", "Portorický příkop"], c: 0 },
+    { q: "Na kterém kontinentu leží poušť Atacama?", a: ["Afrika", "Asie", "Jižní Amerika", "Austrálie"], c: 2 },
+    { q: "Kolik hvězd je na vlajce Spojených států amerických?", a: ["48", "50", "51", "52"], c: 1 },
+    { q: "Která země má nejvíce obyvatel v Evropské unii?", a: ["Francie", "Itálie", "Španělsko", "Německo"], c: 3 },
+    { q: "Jaké je hlavní město Brazílie?", a: ["Rio de Janeiro", "São Paulo", "Brasília", "Salvador"], c: 2 },
+    { q: "Který průliv odděluje Evropu od Afriky u Španělska?", a: ["Beringův průliv", "Gibraltarský průliv", "Bospor", "Lamanšský průliv"], c: 1 },
+    { q: "Které jezero je nejhlubší na světě?", a: ["Viktoriino jezero", "Hořejší jezero", "Bajkal", "Tanganika"], c: 2 },
+    { q: "Ve které zemi leží sopka Fudži?", a: ["Čína", "Jižní Korea", "Japonsko", "Filipíny"], c: 2 },
+    { q: "Jaké je hlavní město Turecka?", a: ["Istanbul", "Ankara", "Antalya", "Izmir"], c: 1 },
+    { q: "Který ostrov je největší na světě (nepočítáme-li kontinenty)?", a: ["Madagaskar", "Borneo", "Grónsko", "Nová Guinea"], c: 2 },
+    { q: "Se kterým z těchto států Česká republika NESOUSEDÍ?", a: ["Polsko", "Rakousko", "Maďarsko", "Slovensko"], c: 2 },
+    { q: "Jakou barvu nemá ani jeden pruh na vlajce Německa?", a: ["Černou", "Červenou", "Bílou", "Zlatou"], c: 2 },
+    { q: "Ve kterém americkém státě leží Grand Canyon?", a: ["Nevada", "Arizona", "Kalifornie", "Texas"], c: 1 },
+
+    // Česká republika
+    { q: "Jaká je nejvyšší hora České republiky?", a: ["Praděd", "Sněžka", "Klínovec", "Lysá hora"], c: 1 },
+    { q: "Ve kterém roce vznikla samostatná Česká republika?", a: ["1989", "1991", "1993", "1995"], c: 2 },
+    { q: "Jak se jmenuje nejdelší řeka v České republice?", a: ["Labe", "Morava", "Vltava", "Odra"], c: 2 },
+    { q: "Jaké je mezinárodní telefonní předčíslí pro Českou republiku?", a: ["+420", "+421", "+48", "+43"], c: 0 },
+    { q: "Kdo napsal drama R.U.R., ve kterém poprvé zaznělo slovo robot?", a: ["Karel Čapek", "Jaroslav Hašek", "Milan Kundera", "Bohumil Hrabal"], c: 0 },
+    { q: "Která osobnost je vyobrazena na české bankovce v hodnotě 1000 Kč?", a: ["Karel IV.", "František Palacký", "Božena Němcová", "Tomáš Garrigue Masaryk"], c: 1 },
+    { q: "Jak se jmenuje nejvyšší hora Moravy a Slezska (Jeseníků)?", a: ["Lysá hora", "Radhošť", "Praděd", "Králický Sněžník"], c: 2 },
+    { q: "U kterého města soutékají řeky Labe a Vltava?", a: ["Litoměřice", "Mělník", "Kolín", "Nymburk"], c: 1 },
+    { q: "Který český vědec získal Nobelovu cenu za chemii za objev polarografie?", a: ["Otto Wichterle", "Jaroslav Heyrovský", "Antonín Holý", "František Křižík"], c: 1 },
+    { q: "Ve kterém městě se vyrábí pivo Pilsner Urquell?", a: ["České Budějovice", "Plzeň", "Brno", "Žatec"], c: 1 },
+    { q: "Kdo vynalezl měkké kontaktní čočky?", a: ["František Křižík", "Viktor Kaplan", "Otto Wichterle", "Prokop Diviš"], c: 2 },
+    { q: "Kolik krajů má Česká republika (včetně Prahy)?", a: ["12", "13", "14", "15"], c: 2 },
+    { q: "Jak se jmenuje největší rybník v České republice?", a: ["Bezdrev", "Rožmberk", "Svět", "Máchovo jezero"], c: 1 },
+    { q: "Na které hoře sídlí podle pověsti blaničtí rytíři?", a: ["Říp", "Blaník", "Radhošť", "Klet"], c: 1 },
+    { q: "Ve kterém roce vstoupila Česká republika do Evropské unie?", a: ["1999", "2002", "2004", "2007"], c: 2 },
+    { q: "Který hrad byl postaven Karlem IV. pro uložení korunovačních klenotů?", a: ["Křivoklát", "Karlštejn", "Bezděz", "Loket"], c: 1 },
+    { q: "Jaká je nejnižší nadmořská výška v ČR (u Hřenska)?", a: ["55 m n. m.", "115 m n. m.", "205 m n. m.", "250 m n. m."], c: 1 },
+    { q: "Kdo je autorem hudby k opeře Prodaná nevěsta?", a: ["Antonín Dvořák", "Leoš Janáček", "Bedřich Smetana", "Zdeněk Fibich"], c: 2 },
+    { q: "Ve kterém moravském městě sídlí Ústavní soud ČR?", a: ["Olomouc", "Brno", "Ostrava", "Zlín"], c: 1 },
+    { q: "Jak se jmenuje propast, která je nejhlubší zatopenou sladkovodní propastí na světě?", a: ["Macocha", "Hranická propast", "Čertova díra", "Koněpruské jeskyně"], c: 1 },
+
+    // Historie
+    { q: "Ve kterém roce skončila druhá světová válka?", a: ["1943", "1944", "1945", "1946"], c: 2 },
+    { q: "Kdo namaloval slavný obraz Mona Lisa?", a: ["Michelangelo", "Leonardo da Vinci", "Vincent van Gogh", "Pablo Picasso"], c: 1 },
+    { q: "Ve kterém roce se potopil parník Titanic?", a: ["1905", "1912", "1918", "1923"], c: 1 },
+    { q: "Kdo byl prvním člověkem, který vstoupil na povrch Měsíce?", a: ["Jurij Gagarin", "Buzz Aldrin", "Neil Armstrong", "Michael Collins"], c: 2 },
+    { q: "Ve kterém roce padla Berlínská zeď a proběhla Sametová revoluce?", a: ["1987", "1988", "1989", "1990"], c: 2 },
+    { q: "U kterého dnešního belgického města byl roku 1815 definitivně poražen Napoleon?", a: ["Bruggy", "Waterloo", "Antverpy", "Lutych"], c: 1 },
+    { q: "Který římský vojevůdce a politik byl zavražděn v březnu roku 44 př. n. l.?", a: ["Augustus", "Nero", "Julius Caesar", "Marcus Aurelius"], c: 2 },
+    { q: "Ve kterém roce byl upálen mistr Jan Hus v Kostnici?", a: ["1348", "1415", "1420", "1620"], c: 1 },
+    { q: "Jak se jmenovala první umělá družice Země vypuštěná v roce 1957?", a: ["Vostok 1", "Apollo 1", "Sputnik 1", "Sojuz 1"], c: 2 },
+    { q: "Která bitva z roku 1620 znamenala porážku českého stavovského povstání?", a: ["Bitva u Lipan", "Bitva na Bílé hoře", "Bitva u Slavkova", "Bitva u Hradce Králové"], c: 1 },
+    { q: "Ve kterém roce založil Karel IV. pražskou univerzitu?", a: ["1306", "1348", "1378", "1402"], c: 1 },
+    { q: "Kdo objevil roku 1928 penicilin?", a: ["Louis Pasteur", "Alexander Fleming", "Robert Koch", "Marie Curie"], c: 1 },
+    { q: "Ve kterém ukrajinském městě došlo v roce 1986 k havárii jaderné elektrárny?", a: ["Záporoží", "Černobyl / Pripjať", "Charkov", "Oděsa"], c: 1 },
+    { q: "Jak se jmenovala loď, na které Kryštof Kolumbus v roce 1492 doplul k Americe?", a: ["Mayflower", "Santa María", "Victory", "Beagle"], c: 1 },
+    { q: "Kdo byl prvním prezidentem Československa?", a: ["Edvard Beneš", "Tomáš Garrigue Masaryk", "Klement Gottwald", "Emil Hácha"], c: 1 },
+
+    // Technologie, IT, auta a hry
+    { q: "Kolik bitů má jeden bajt (byte)?", a: ["4", "8", "16", "32"], c: 1 },
+    { q: "Co znamená zkratka CPU v počítači?", a: ["Central Power Unit", "Central Processing Unit", "Computer Personal Unit", "Core Graphic Unit"], c: 1 },
+    { q: "Jaký síťový port standardně používá zabezpečený protokol HTTPS?", a: ["21", "80", "443", "8080"], c: 2 },
+    { q: "Jaké číslo v desítkové soustavě odpovídá binárnímu zápisu 1010?", a: ["8", "10", "12", "16"], c: 1 },
+    { q: "Které studio vytvořilo herní sérii Grand Theft Auto (GTA)?", a: ["Ubisoft", "Rockstar Games", "EA Sports", "Valve"], c: 1 },
+    { q: "V jakém programovacím jazyce byla původně napsána hra Minecraft (Java Edition)?", a: ["C++", "Python", "Java", "C#"], c: 2 },
+    { q: "Co znamená zkratka RAM?", a: ["Read Access Memory", "Random Access Memory", "Rapid Action Module", "Run All Memory"], c: 1 },
+    { q: "Která česká hra se odehrává v roce 1403 v okolí Stříbrné Skalice a Ratají?", a: ["Mafia", "Kingdom Come: Deliverance", "Arma 3", "Vietcong"], c: 1 },
+    { q: "Jak se jmenuje fiktivní město, ve kterém se odehrává první díl české hry Mafia?", a: ["Empire Bay", "Lost Heaven", "Los Santos", "Vice City"], c: 1 },
+    { q: "Co u spalovacích motorů označuje zkratka TDI?", a: ["Turbo Direct Injection", "Total Diesel Ignition", "Twin Dynamic Intake", "Thermal Drive Engine"], c: 0 },
+    { q: "Která součástka v autě dobíjí autobaterii za jízdy?", a: ["Startér", "Alternátor", "Katalyzátor", "Diferenciál"], c: 1 },
+    { q: "Kolik koní (HP) odpovídá zhruba výkonu 100 kW?", a: ["cca 100 koní", "cca 115 koní", "cca 136 koní", "cca 160 koní"], c: 2 },
+    { q: "V kterém českém městě má hlavní sídlo a výrobu automobilka Škoda Auto?", a: ["Kvasiny", "Mladá Boleslav", "Kolín", "Nošovice"], c: 1 },
+    { q: "Jak se jmenuje zakladatel společnosti Microsoft?", a: ["Steve Jobs", "Elon Musk", "Bill Gates", "Mark Zuckerberg"], c: 2 },
+    { q: "Jaká klávesová zkratka ve Windows slouží pro vrácení poslední akce (Zpět)?", a: ["Ctrl + C", "Ctrl + Z", "Ctrl + X", "Ctrl + Y"], c: 1 },
+    { q: "Co znamená stavový kód HTTP 404?", a: ["Chyba serveru", "Přístup odepřen", "Stránka nenalezena", "Úspěšný požadavek"], c: 2 },
+    { q: "Jak se jmenuje hlavní hrdina herní a knižní série Zaklínač (The Witcher)?", a: ["Vesemir", "Geralt z Rivie", "Ezio Auditore", "Arthur Morgan"], c: 1 },
+    { q: "Která společnost vyvíjí mobilní operační systém Android?", a: ["Apple", "Microsoft", "Google", "Samsung"], c: 2 },
+
+    // Filmy, hudba, sport a kultura
+    { q: "Kolik hráčů jednoho týmu je současně na ledě při hokeji (včetně brankáře)?", a: ["5", "6", "7", "11"], c: 1 },
+    { q: "Jak dlouho trvá základní hrací doba běžného fotbalového zápasu?", a: ["60 minut", "80 minut", "90 minut", "100 minut"], c: 2 },
+    { q: "Ve kterém roce vyhráli čeští hokejisté olympijský turnaj v Naganu?", a: ["1994", "1998", "2002", "2006"], c: 1 },
+    { q: "Kolik kruhů tvoří symbol olympijských her?", a: ["4", "5", "6", "7"], c: 1 },
+    { q: "Který režisér natočil české filmy Pelíšky a Pupendo?", a: ["Zdeněk Svěrák", "Jan Hřebejk", "Miloš Forman", "Jiří Menzel"], c: 1 },
+    { q: "Jak se jmenuje kouzelnická škola, kterou navštěvoval Harry Potter?", a: ["Stříbrný vrch", "Bradavice", "Krásnohůlky", "Kruval"], c: 1 },
+    { q: "Kolik prstenů moci bylo ukováno pro pány elfů v Pánovi prstenů?", a: ["3", "7", "9", "1"], c: 0 },
+    { q: "Jakou pilulku si vybere Neo ve filmu Matrix, aby poznal pravdu?", a: ["Modrou", "Zelenou", "Červenou", "Žlutou"], c: 2 },
+    { q: "Kdo složil slavnou skladbu Pro Elišku (Für Elise)?", a: ["W. A. Mozart", "Ludwig van Beethoven", "Johann Sebastian Bach", "Antonio Vivaldi"], c: 1 },
+    { q: "Na jakém povrchu se hraje slavný tenisový turnaj Roland Garros v Paříži?", a: ["Tráva", "Antuka", "Tvrdý povrch", "Koberec"], c: 1 },
+    { q: "Jaká je přesná délka maratonského běhu?", a: ["40,000 km", "42,195 km", "45,500 km", "50,000 km"], c: 1 },
+    { q: "Který herec ztvárnil postavu Iron Mana (Tonyho Starka) ve filmech od Marvelu?", a: ["Chris Evans", "Robert Downey Jr.", "Chris Hemsworth", "Hugh Jackman"], c: 1 },
+    { q: "Jak se jmenuje žlutá rodinka ze seriálu, která bydlí ve městečku Springfield?", a: ["Griffinovi", "Simpsonovi", "Flintstoneovi", "Jetsonovi"], c: 1 },
+    { q: "Kolik políček má standardní šachovnice?", a: ["32", "48", "64", "81"], c: 2 },
+
+    // Gastro a různé zajímavosti
+    { q: "Z jaké rostliny se vyrábí pravý karibský rum?", a: ["Agáve", "Cukrová třtina", "Kukuřice", "Ječmen"], c: 1 },
+    { q: "Jaká hlavní surovina tvoří základ mexického dipu guacamole?", a: ["Rajčata", "Paprika", "Avokádo", "Fazole"], c: 2 },
+    { q: "Které koření je nejdražší na světě podle hmotnosti?", a: ["Vanilka", "Šafrán", "Kardamom", "Skořice"], c: 1 },
+    { q: "Z jakého ovoce se vyrábí tradiční nápoj cider?", a: ["Z hrušek", "Z jablek", "Z hroznů", "Ze švestek"], c: 1 },
+    { q: "Jaký alkohol je základem koktejlu Mojito?", a: ["Vodka", "Gin", "Bílý rum", "Tequila"], c: 2 },
+    { q: "Kolik dní má přestupný rok?", a: ["364", "365", "366", "367"], c: 2 },
+    { q: "Jaké římské číslo představuje písmeno L?", a: ["10", "50", "100", "500"], c: 1 },
+    { q: "Který smysl mají psi nejvíce vyvinutý?", a: ["Zrak", "Sluch", "Čich", "Chuť"], c: 2 },
+    { q: "Jak se jmenuje tradiční japonské umění skládání papíru?", a: ["Bonsai", "Origami", "Ikebana", "Sudoku"], c: 1 },
+    { q: "Z jakého dřeva se nejčastěji vyrábějí sudy pro zrání vína a whisky?", a: ["Smrk", "Bříza", "Dub", "Borovice"], c: 2 },
+    { q: "Kolik karet má standardní balíček mariášových karet (prší)?", a: ["24", "32", "52", "64"], c: 1 },
+    { q: "Jaká barva vznikne smícháním modré a žluté barvy?", a: ["Fialová", "Oranžová", "Zelená", "Hnědá"], c: 2 },
+    { q: "Co měří Richterova stupnice?", a: ["Rychlost větru", "Sílu zemětřesení", "Pálivost chilli", "Tvrdost nerostů"], c: 1 }
+];
+
+document.getElementById("db-count").innerText = QUESTIONS.length;
+
+const BROKERS = [
+    "wss://broker.emqx.io:8084/mqtt",
+    "wss://broker.hivemq.com:8884/mqtt"
+];
+
+let brokerIndex = 0;
+let client = null;
+let myId = localStorage.getItem("vv_pid") || "p_" + Math.random().toString(36).substring(2, 9);
+localStorage.setItem("vv_pid", myId);
+
+let myName = localStorage.getItem("vv_name") || "";
+document.getElementById("player-name").value = myName;
+
+let currentPin = null;
+let gameState = null;
+let players = {};
+let usedQuestions = [];
+
+function connectBroker() {
+    const url = BROKERS[brokerIndex];
+    client = mqtt.connect(url, {
+        clientId: "vv_client_" + myId + "_" + Math.floor(Math.random() * 1000),
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 2000
+    });
+
+    client.on("connect", () => {
+        document.getElementById("conn-dot").className = "dot online";
+        document.getElementById("conn-text").innerText = "Online – připraveno";
+        document.getElementById("btn-create").disabled = false;
+        document.getElementById("btn-join").disabled = false;
+
+        if (currentPin) {
+            subscribeToRoom(currentPin);
+        }
+    });
+
+    client.on("error", () => {
+        TryNextBroker();
+    });
+
+    client.on("offline", () => {
+        document.getElementById("conn-dot").className = "dot";
+        document.getElementById("conn-text").innerText = "Obnovování spojení...";
+    });
+
+    client.on("message", (topic, message) => {
+        if (!currentPin) return;
+        const msgStr = message.toString();
+        if (!msgStr) return;
+
         try {
-            appInstance = initializeApp(firebaseConfig);
-            db = getFirestore(appInstance);
-            auth = getAuth(appInstance);
+            const data = JSON.parse(msgStr);
+            const prefix = `vyzyvatel_cz_26/${currentPin}/`;
+
+            if (topic === prefix + "game") {
+                gameState = data;
+                if (gameState.qIndices) {
+                    gameState.qIndices.forEach(idx => {
+                        if (!usedQuestions.includes(idx)) usedQuestions.push(idx);
+                    });
+                }
+                renderUI();
+            } else if (topic.startsWith(prefix + "players/")) {
+                const pid = topic.replace(prefix + "players/", "");
+                if (data.left) {
+                    delete players[pid];
+                } else {
+                    players[pid] = data;
+                }
+                checkAutoReveal();
+                renderUI();
+            }
         } catch (e) {
-            console.error("Firebase init failed:", e);
+            console.error(e);
+        }
+    });
+}
+
+function TryNextBroker() {
+    if (brokerIndex < BROKERS.length - 1) {
+        brokerIndex++;
+        if (client) client.end(true);
+        connectBroker();
+    }
+}
+
+function saveName() {
+    const val = document.getElementById("player-name").value.trim();
+    if (!val) {
+        alert("Zadej prosím svou přezdívku!");
+        return false;
+    }
+    myName = val;
+    localStorage.setItem("vv_name", myName);
+    return true;
+}
+
+function subscribeToRoom(pin) {
+    const prefix = `vyzyvatel_cz_26/${pin}/`;
+    client.subscribe(prefix + "game", { qos: 1 });
+    client.subscribe(prefix + "players/+", { qos: 1 });
+}
+
+function publishGameState(state) {
+    if (!currentPin) return;
+    client.publish(`vyzyvatel_cz_26/${currentPin}/game`, JSON.stringify(state), { qos: 1, retain: true });
+}
+
+function publishMyPlayer(extra = {}) {
+    if (!currentPin) return;
+    const current = players[myId] || { id: myId, name: myName, score: 0, answeredRound: -1, answer: null };
+    const updated = { ...current, name: myName, ...extra };
+    players[myId] = updated;
+    client.publish(`vyzyvatel_cz_26/${currentPin}/players/${myId}`, JSON.stringify(updated), { qos: 1, retain: true });
+}
+
+function getShuffledQuestionIndices(count = 15) {
+    let available = QUESTIONS.map((_, i) => i).filter(i => !usedQuestions.includes(i));
+    if (available.length < count) {
+        usedQuestions = [];
+        available = QUESTIONS.map((_, i) => i);
+    }
+    for (let i = available.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [available[i], available[j]] = [available[j], available[i]];
+    }
+    const selected = available.slice(0, count);
+    selected.forEach(idx => usedQuestions.push(idx));
+    return selected;
+}
+
+function createRoom() {
+    if (!saveName()) return;
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    currentPin = pin;
+    players = {};
+
+    subscribeToRoom(pin);
+
+    const roundsCount = parseInt(document.getElementById("round-select").value) || 15;
+    const initialGame = {
+        pin: pin,
+        status: "lobby",
+        round: 0,
+        roundsCount: roundsCount,
+        qIndices: getShuffledQuestionIndices(roundsCount),
+        updatedAt: Date.now()
+    };
+
+    publishGameState(initialGame);
+    publishMyPlayer({ score: 0, answeredRound: -1, answer: null });
+}
+
+function changeRoundsCount(val) {
+    const count = parseInt(val) || 15;
+    if (gameState && gameState.status === "lobby") {
+        publishGameState({
+            ...gameState,
+            roundsCount: count,
+            qIndices: getShuffledQuestionIndices(count),
+            updatedAt: Date.now()
+        });
+    }
+}
+
+function joinRoom() {
+    if (!saveName()) return;
+    const pin = document.getElementById("join-pin").value.trim();
+    if (pin.length !== 4) {
+        alert("Zadej 4místný PIN místnosti!");
+        return;
+    }
+    currentPin = pin;
+    players = {};
+    subscribeToRoom(pin);
+    publishMyPlayer({ score: 0, answeredRound: -1, answer: null });
+
+    setTimeout(() => {
+        if (!gameState) {
+            const fallbackGame = {
+                pin: pin,
+                status: "lobby",
+                round: 0,
+                roundsCount: 15,
+                qIndices: getShuffledQuestionIndices(15),
+                updatedAt: Date.now()
+            };
+            publishGameState(fallbackGame);
+        }
+    }, 1500);
+}
+
+function leaveRoom() {
+    if (currentPin) {
+        const prefix = `vyzyvatel_cz_26/${currentPin}/`;
+        client.publish(`${prefix}players/${myId}`, JSON.stringify({ left: true }), { qos: 1, retain: true });
+        client.unsubscribe(prefix + "game");
+        client.unsubscribe(prefix + "players/+");
+    }
+    currentPin = null;
+    gameState = null;
+    players = {};
+    showScreen("screen-menu");
+    document.getElementById("room-badge").classList.add("hidden");
+}
+
+function startGame() {
+    if (!gameState) return;
+    publishGameState({
+        ...gameState,
+        status: "playing",
+        round: 0,
+        updatedAt: Date.now()
+    });
+}
+
+function submitAnswer(ansIndex) {
+    if (!gameState || gameState.status !== "playing") return;
+    const me = players[myId];
+    if (me && me.answeredRound === gameState.round) return;
+
+    const qIdx = gameState.qIndices[gameState.round];
+    const question = QUESTIONS[qIdx];
+    const isCorrect = (ansIndex === question.c);
+    const newScore = (me ? me.score : 0) + (isCorrect ? 100 : 0);
+
+    publishMyPlayer({
+        score: newScore,
+        answeredRound: gameState.round,
+        answer: ansIndex
+    });
+}
+
+function checkAutoReveal() {
+    if (!gameState || gameState.status !== "playing") return;
+    const pList = Object.values(players);
+    if (pList.length === 0) return;
+
+    const allAnswered = pList.every(p => p.answeredRound === gameState.round);
+    if (allAnswered) {
+        const sortedIds = Object.keys(players).sort();
+        if (sortedIds[0] === myId) {
+            setTimeout(() => {
+                if (gameState && gameState.status === "playing") {
+                    revealResults();
+                }
+            }, 400);
+        }
+    }
+}
+
+function revealResults() {
+    if (!gameState) return;
+    publishGameState({
+        ...gameState,
+        status: "results",
+        updatedAt: Date.now()
+    });
+}
+
+function nextRound() {
+    if (!gameState) return;
+    if (gameState.round + 1 >= gameState.qIndices.length) {
+        publishGameState({
+            ...gameState,
+            status: "finished",
+            updatedAt: Date.now()
+        });
+    } else {
+        publishGameState({
+            ...gameState,
+            status: "playing",
+            round: gameState.round + 1,
+            updatedAt: Date.now()
+        });
+    }
+}
+
+function restartGame() {
+    const count = (gameState && gameState.roundsCount) ? gameState.roundsCount : 15;
+    // Reset skóre všem aktivním hráčům
+    Object.values(players).forEach(p => {
+        const resetPlayer = { ...p, score: 0, answeredRound: -1, answer: null };
+        client.publish(`vyzyvatel_cz_26/${currentPin}/players/${p.id}`, JSON.stringify(resetPlayer), { qos: 1, retain: true });
+    });
+
+    publishGameState({
+        pin: currentPin,
+        status: "playing",
+        round: 0,
+        roundsCount: count,
+        qIndices: getShuffledQuestionIndices(count),
+        updatedAt: Date.now()
+    });
+}
+
+function showScreen(id) {
+    ["screen-menu", "screen-lobby", "screen-game", "screen-results"].forEach(s => {
+        document.getElementById(s).classList.toggle("hidden", s !== id);
+    });
+}
+
+function renderUI() {
+    if (!currentPin || !gameState) return;
+
+    document.getElementById("room-badge").classList.remove("hidden");
+    document.getElementById("badge-pin").innerText = currentPin;
+
+    const pList = Object.values(players);
+
+    if (gameState.status === "lobby") {
+        showScreen("screen-lobby");
+        document.getElementById("lobby-pin").innerText = currentPin;
+        document.getElementById("lobby-count").innerText = pList.length;
+        if (gameState.roundsCount) {
+            document.getElementById("round-select").value = gameState.roundsCount.toString();
         }
 
-        // --- GAME QUESTION DATABASE ---
-        const ALL_QUESTIONS = [
-            { q: "Kolik měří Sněžka, nejvyšší hora ČR?", options: ["1492 m", "1603 m", "1630 m", "1550 m"], correct: 1 },
-            { q: "Jaké je hlavní město Austrálie?", options: ["Sydney", "Melbourne", "Canberra", "Perth"], correct: 2 },
-            { q: "Kdo je autorem divadelní hry R.U.R., kde poprvé zaznělo slovo 'robot'?", options: ["Karel Čapek", "Josef Čapek", "Franz Kafka", "Bohumil Hrabal"], correct: 0 },
-            { q: "Jaký je chemický vzorec vody?", options: ["CO2", "H2O", "O2", "NaCl"], correct: 1 },
-            { q: "Která planeta je nejblíže Slunci?", options: ["Venuše", "Mars", "Merkur", "Země"], correct: 2 },
-            { q: "V jakém roce skončila 2. světová válka?", options: ["1939", "1942", "1945", "1948"], correct: 2 },
-            { q: "Jaké je nejrychlejší suchozemské zvíře?", options: ["Lev", "Sokol", "Gepard", "Pštros"], correct: 2 },
-            { q: "Kolik má dospělý člověk obvykle zubů?", options: ["28", "30", "32", "34"], correct: 2 },
-            { q: "Která řeka je nejdelší na světě?", options: ["Amazonka", "Nil", "Jang-c'-ťiang", "Mississippi"], correct: 0 }, // Obecně přijímáno Amazonka dle moderních měření, ale často i Nil. Dáme Amazonku.
-            { q: "Kdo byl prvním československým prezidentem?", options: ["Edvard Beneš", "Tomáš Garrigue Masaryk", "Václav Havel", "Klement Gottwald"], correct: 1 },
-            { q: "Jaká je nejmenší kost v lidském těle?", options: ["Třmínek (v uchu)", "Článek prstu", "Kostrč", "Klíční kost"], correct: 0 },
-            { q: "Který z těchto prvků je zlato?", options: ["Ag", "Au", "Fe", "Cu"], correct: 1 },
-            { q: "Kolik barev má duha?", options: ["5", "6", "7", "8"], correct: 2 },
-            { q: "Kde leží pyramidy v Gíze?", options: ["Mexiko", "Řecko", "Egypt", "Peru"], correct: 2 },
-            { q: "Jaký je největší oceán na Zemi?", options: ["Atlantský", "Tichý", "Indický", "Severní ledový"], correct: 1 },
-            { q: "Kolik nohou má pavouk?", options: ["6", "8", "10", "12"], correct: 1 },
-            { q: "Kdo namaloval obraz Mona Lisa?", options: ["Vincent van Gogh", "Pablo Picasso", "Leonardo da Vinci", "Claude Monet"], correct: 2 },
-            { q: "Který sport hrají 'Rytíři Kladno'?", options: ["Fotbal", "Basketbal", "Florbal", "Lední hokej"], correct: 3 },
-            { q: "Co je to 'Wifi'?", options: ["Značka kávy", "Bezdrátová síť", "Druh sýra", "Hlavní město"], correct: 1 },
-            { q: "V jakém měsíci slavíme Vánoce?", options: ["Listopad", "Prosinec", "Leden", "Říjen"], correct: 1 }
-        ];
+        const container = document.getElementById("lobby-players");
+        container.innerHTML = "";
+        pList.forEach(p => {
+            const chip = document.createElement("div");
+            chip.className = "player-chip";
+            chip.innerText = p.name + (p.id === myId ? " (Ty)" : "");
+            container.appendChild(chip);
+        });
+    }
 
-        // --- APP STATE & LOGIC ---
-        const app = {
-            user: null,
-            playerName: '',
-            roomCode: null,
-            roomRef: null,
-            unsubscribe: null,
-            gameState: null,
-            myAnswer: null,
-            isTransitioning: false,
+    else if (gameState.status === "playing") {
+        showScreen("screen-game");
+        const round = gameState.round;
+        const total = gameState.qIndices.length;
+        const qObj = QUESTIONS[gameState.qIndices[round]];
 
-            async init() {
-                this.showToast("Připojování ke hře...", "blue");
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    this.user = auth.currentUser;
-                    
-                    // Check local storage for name just for convenience, but Firestore is main state
-                    const savedName = localStorage.getItem('vyzva_name');
-                    if (savedName) {
-                        document.getElementById('player-name').value = savedName;
-                    }
-                    
-                    this.showScreen('screen-login');
-                } catch (e) {
-                    console.error("Auth error:", e);
-                    this.showToast("Chyba připojení. Zkuste obnovit stránku.", "red");
-                }
-            },
+        const answeredCount = pList.filter(p => p.answeredRound === round).length;
+        document.getElementById("round-info").innerText = `Otázka ${round + 1} / ${total}`;
+        document.getElementById("answered-info").innerText = `Odpovědělo: ${answeredCount} / ${pList.length}`;
+        document.getElementById("question-text").innerText = qObj.q;
 
-            setPlayerName() {
-                const nameInput = document.getElementById('player-name').value.trim();
-                if (nameInput.length < 2) {
-                    this.showToast("Přezdívka musí mít aspoň 2 znaky.");
-                    return;
-                }
-                this.playerName = nameInput;
-                localStorage.setItem('vyzva_name', nameInput);
-                document.getElementById('display-name').innerText = this.playerName;
-                this.showScreen('screen-menu');
-            },
+        const me = players[myId];
+        const myAnswered = me && me.answeredRound === round;
 
-            generateRoomCode() {
-                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-                let result = '';
-                for (let i = 0; i < 4; i++) {
-                    result += chars.charAt(Math.floor(Math.random() * chars.length));
-                }
-                return result;
-            },
+        const ansContainer = document.getElementById("answers-container");
+        ansContainer.innerHTML = "";
+        const letters = ["A", "B", "C", "D"];
 
-            getRandomQuestions(count) {
-                const shuffled = [...ALL_QUESTIONS].sort(() => 0.5 - Math.random());
-                return shuffled.slice(0, count);
-            },
-
-            async createRoom() {
-                if (!this.user) return;
-                this.showToast("Vytvářím místnost...", "blue");
-                
-                const code = this.generateRoomCode();
-                const path = `artifacts/${appId}/public/data/games`;
-                const roomDoc = doc(db, path, code);
-
-                const newGameData = {
-                    status: 'waiting', // waiting, playing, results, finished
-                    hostId: this.user.uid,
-                    players: {
-                        [this.user.uid]: { name: this.playerName, score: 0 }
-                    },
-                    questions: this.getRandomQuestions(7), // 7 questions per game
-                    currentQIndex: 0,
-                    answers: {} // mapping: uid -> index of option
-                };
-
-                try {
-                    await setDoc(roomDoc, newGameData);
-                    this.joinRoomWithCode(code);
-                } catch (e) {
-                    console.error("Create room error:", e);
-                    this.showToast("Nepodařilo se vytvořit hru. " + e.message, "red");
-                }
-            },
-
-            async joinRoom() {
-                const codeInput = document.getElementById('join-code').value.trim().toUpperCase();
-                if (codeInput.length !== 4) {
-                    this.showToast("Kód musí mít 4 znaky.");
-                    return;
-                }
-                this.joinRoomWithCode(codeInput);
-            },
-
-            async joinRoomWithCode(code) {
-                if (!this.user) return;
-                this.showToast("Připojuji...", "blue");
-
-                const path = `artifacts/${appId}/public/data/games`;
-                const roomDoc = doc(db, path, code);
-
-                try {
-                    const snap = await getDoc(roomDoc);
-                    if (!snap.exists()) {
-                        this.showToast("Hra nenalezena! Zkontroluj kód.");
-                        return;
-                    }
-                    
-                    const data = snap.data();
-                    if (data.status === 'finished') {
-                        this.showToast("Tato hra již skončila.");
-                        return;
-                    }
-
-                    // Add player to room
-                    await updateDoc(roomDoc, {
-                        [`players.${this.user.uid}`]: { name: this.playerName, score: data.players?.[this.user.uid]?.score || 0 }
-                    });
-
-                    this.roomCode = code;
-                    this.roomRef = roomDoc;
-                    
-                    document.getElementById('header-room-code').classList.remove('hidden');
-                    document.getElementById('room-pin-display').innerText = code;
-                    document.getElementById('lobby-code').innerText = code;
-
-                    this.subscribeToRoom();
-
-                } catch (e) {
-                    console.error("Join room error:", e);
-                    this.showToast("Chyba při připojování.", "red");
-                }
-            },
-
-            subscribeToRoom() {
-                if (this.unsubscribe) this.unsubscribe();
-                
-                this.unsubscribe = onSnapshot(this.roomRef, (docSnap) => {
-                    if (!docSnap.exists()) {
-                        this.leaveRoom("Hra byla zrušena.");
-                        return;
-                    }
-                    const data = docSnap.data();
-                    this.gameState = data;
-                    this.handleStateChange(data);
-                }, (error) => {
-                    console.error("Snapshot error:", error);
-                    this.showToast("Ztráta spojení.", "red");
-                });
-            },
-
-            handleStateChange(data) {
-                // Determine which screen to show based on game status
-                switch(data.status) {
-                    case 'waiting':
-                        this.renderLobby(data);
-                        break;
-                    case 'playing':
-                        this.renderQuestion(data);
-                        break;
-                    case 'results':
-                        this.renderRoundResults(data);
-                        break;
-                    case 'finished':
-                        this.renderFinal(data);
-                        break;
-                }
-            },
-
-            renderLobby(data) {
-                this.showScreen('screen-lobby');
-                const playersList = document.getElementById('players-list');
-                playersList.innerHTML = '';
-                
-                const players = Object.values(data.players || {});
-                document.getElementById('player-count').innerText = players.length;
-
-                players.forEach(p => {
-                    const li = document.createElement('li');
-                    li.className = "p-3 bg-slate-700/50 rounded-xl flex items-center font-semibold text-slate-200 border border-slate-600/50";
-                    li.innerHTML = `<span class="mr-2 text-xl">${this.getAvatar(p.name)}</span> ${p.name}`;
-                    playersList.appendChild(li);
-                });
-
-                // Everyone can start to avoid deadlocks
-                document.getElementById('btn-start-game').style.display = 'block';
-            },
-
-            async startGame() {
-                if (!this.roomRef) return;
-                try {
-                    await updateDoc(this.roomRef, {
-                        status: 'playing',
-                        currentQIndex: 0,
-                        answers: {}
-                    });
-                } catch (e) {
-                    this.showToast("Chyba při startu.");
-                }
-            },
-
-            renderQuestion(data) {
-                this.showScreen('screen-question');
-                this.myAnswer = null;
-                this.isTransitioning = false;
-                
-                const qIndex = data.currentQIndex || 0;
-                const question = data.questions[qIndex];
-                
-                document.getElementById('question-number').innerText = qIndex + 1;
-                document.getElementById('total-questions').innerText = data.questions.length;
-                
-                const answers = data.answers || {};
-                const answeredCount = Object.keys(answers).length;
-                const totalPlayers = Object.keys(data.players || {}).length;
-                
-                document.getElementById('answered-count').innerText = `${answeredCount}/${totalPlayers}`;
-                document.getElementById('question-text').innerText = question.q;
-
-                const optionsContainer = document.getElementById('options-container');
-                const waitingDiv = document.getElementById('waiting-others');
-                
-                // If I have already answered
-                if (answers[this.user.uid] !== undefined) {
-                    this.myAnswer = answers[this.user.uid];
-                    optionsContainer.classList.add('hidden');
-                    waitingDiv.classList.remove('hidden');
-                } else {
-                    optionsContainer.classList.remove('hidden');
-                    waitingDiv.classList.add('hidden');
-                    optionsContainer.innerHTML = '';
-                    
-                    const colors = [
-                        'bg-red-500 hover:bg-red-400 shadow-red-500/30 border-red-400/50',
-                        'bg-blue-500 hover:bg-blue-400 shadow-blue-500/30 border-blue-400/50',
-                        'bg-yellow-500 hover:bg-yellow-400 shadow-yellow-500/30 border-yellow-400/50',
-                        'bg-green-500 hover:bg-green-400 shadow-green-500/30 border-green-400/50'
-                    ];
-
-                    question.options.forEach((opt, index) => {
-                        const btn = document.createElement('button');
-                        btn.className = `btn w-full p-4 rounded-xl font-bold text-lg text-white shadow-lg border text-left flex items-center ${colors[index % colors.length]}`;
-                        btn.innerHTML = `<span class="bg-black/20 w-8 h-8 rounded-full flex items-center justify-center mr-3 shrink-0">${['A','B','C','D'][index]}</span> <span>${opt}</span>`;
-                        btn.onclick = () => this.submitAnswer(index);
-                        optionsContainer.appendChild(btn);
-                    });
-                }
-
-                // Auto-advance logic: if everyone answered
-                if (answeredCount >= totalPlayers && totalPlayers > 0) {
-                    this.evaluateRound();
-                }
-            },
-
-            async submitAnswer(index) {
-                if (!this.roomRef || this.myAnswer !== null) return;
-                this.myAnswer = index;
-                
-                // Optimistic UI update
-                document.getElementById('options-container').classList.add('hidden');
-                document.getElementById('waiting-others').classList.remove('hidden');
-
-                try {
-                    await updateDoc(this.roomRef, {
-                        [`answers.${this.user.uid}`]: index
-                    });
-                } catch (e) {
-                    this.showToast("Chyba při odesílání odpovědi.", "red");
-                    this.myAnswer = null; // Revert
-                }
-            },
-
-            async endRoundForce() {
-                if(this.gameState && this.gameState.status === 'playing') {
-                     this.evaluateRound();
-                }
-            },
-
-            async evaluateRound() {
-                // Guard to prevent multiple clients evaluating simultaneously and causing weird state bugs
-                if (this.isTransitioning || !this.gameState) return;
-                this.isTransitioning = true;
-
-                const data = this.gameState;
-                const qIndex = data.currentQIndex || 0;
-                const question = data.questions[qIndex];
-                const answers = data.answers || {};
-                const players = data.players || {};
-
-                // Calculate new scores
-                let updates = { status: 'results' };
-                let anyChanges = false;
-
-                Object.keys(answers).forEach(uid => {
-                    if (answers[uid] === question.correct) {
-                        const currentScore = players[uid]?.score || 0;
-                        updates[`players.${uid}.score`] = currentScore + 100;
-                        anyChanges = true;
-                    }
-                });
-
-                try {
-                    await updateDoc(this.roomRef, updates);
-                } catch (e) {
-                    console.error("Eval error", e);
-                    this.isTransitioning = false;
-                }
-            },
-
-            renderRoundResults(data) {
-                this.showScreen('screen-results');
-                
-                const qIndex = data.currentQIndex || 0;
-                const question = data.questions[qIndex];
-                
-                document.getElementById('correct-answer-display').innerHTML = `
-                    <p class="text-slate-400 text-sm mb-1">Správná odpověd:</p>
-                    <div class="bg-green-900/40 text-green-400 border border-green-600/50 rounded-xl p-3 font-bold text-lg inline-block shadow-lg">
-                        ${question.options[question.correct]}
-                    </div>
-                `;
-
-                const playersList = Object.keys(data.players).map(uid => ({
-                    uid,
-                    ...data.players[uid],
-                    lastAnswer: data.answers?.[uid]
-                })).sort((a, b) => b.score - a.score);
-
-                const listEl = document.getElementById('scoreboard-list');
-                listEl.innerHTML = '';
-
-                playersList.forEach((p, index) => {
-                    const li = document.createElement('li');
-                    
-                    let statusIcon = "⏳"; // did not answer
-                    if (p.lastAnswer !== undefined) {
-                        statusIcon = p.lastAnswer === question.correct ? "✅" : "❌";
-                    }
-
-                    let rankClass = "bg-slate-700/50";
-                    let rankText = `${index + 1}.`;
-                    if (index === 0 && p.score > 0) { rankClass = "bg-yellow-900/30 border-yellow-500/30 text-yellow-400"; rankText = "👑"; }
-                    else if (index === 1 && p.score > 0) { rankClass = "bg-slate-400/20 text-slate-300"; }
-                    else if (index === 2 && p.score > 0) { rankClass = "bg-orange-900/20 text-orange-300"; }
-
-                    li.className = `p-3 rounded-xl flex items-center justify-between font-semibold border border-slate-600/30 ${rankClass} ${p.uid === this.user.uid ? 'ring-1 ring-white/50' : ''}`;
-                    
-                    li.innerHTML = `
-                        <div class="flex items-center truncate">
-                            <span class="w-6 text-center mr-2">${rankText}</span>
-                            <span class="mr-2 text-xl">${this.getAvatar(p.name)}</span> 
-                            <span class="truncate">${p.name} ${p.uid === this.user.uid ? '(Ty)' : ''}</span>
-                        </div>
-                        <div class="flex items-center shrink-0 ml-2">
-                            <span class="mr-3 text-lg">${statusIcon}</span>
-                            <span class="bg-black/30 px-2 py-1 rounded text-sm w-16 text-right">${p.score} b</span>
-                        </div>
-                    `;
-                    listEl.appendChild(li);
-                });
-            },
-
-            async nextRound() {
-                if (!this.roomRef || !this.gameState) return;
-                
-                const data = this.gameState;
-                const nextIndex = (data.currentQIndex || 0) + 1;
-                
-                try {
-                    if (nextIndex >= data.questions.length) {
-                        await updateDoc(this.roomRef, { status: 'finished' });
-                    } else {
-                        await updateDoc(this.roomRef, {
-                            status: 'playing',
-                            currentQIndex: nextIndex,
-                            answers: {}
-                        });
-                    }
-                } catch (e) {
-                    this.showToast("Chyba při přechodu do dalšího kola.");
-                }
-            },
-
-            renderFinal(data) {
-                this.showScreen('screen-final');
-                document.getElementById('header-room-code').classList.add('hidden');
-
-                const playersList = Object.keys(data.players).map(uid => ({
-                    ...data.players[uid]
-                })).sort((a, b) => b.score - a.score);
-
-                const podium = document.getElementById('podium');
-                podium.innerHTML = '';
-
-                playersList.forEach((p, index) => {
-                    const div = document.createElement('div');
-                    let style = "p-4 mb-2 flex justify-between rounded-xl border";
-                    let icon = `${index + 1}.`;
-                    
-                    if (index === 0) { style += " bg-yellow-500/20 border-yellow-500/50 text-yellow-300 font-bold text-xl"; icon="🏆"; }
-                    else if (index === 1) { style += " bg-slate-400/20 border-slate-400/50 text-slate-200 text-lg"; icon="🥈"; }
-                    else if (index === 2) { style += " bg-orange-700/20 border-orange-500/50 text-orange-200"; icon="🥉"; }
-                    else { style += " bg-slate-800 border-slate-700 text-slate-400"; }
-
-                    div.className = style;
-                    div.innerHTML = `
-                        <div class="flex items-center">
-                            <span class="w-8 text-center mr-2">${icon}</span>
-                            <span>${p.name}</span>
-                        </div>
-                        <div>${p.score} b</div>
-                    `;
-                    podium.appendChild(div);
-                });
-            },
-
-            leaveRoom(msg = "") {
-                if (this.unsubscribe) {
-                    this.unsubscribe();
-                    this.unsubscribe = null;
-                }
-                this.roomCode = null;
-                this.roomRef = null;
-                this.gameState = null;
-                document.getElementById('header-room-code').classList.add('hidden');
-                this.showScreen('screen-menu');
-                if (msg) this.showToast(msg);
-            },
-
-            showScreen(id) {
-                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-                document.getElementById(id).classList.add('active');
-            },
-
-            showToast(message, color = 'red') {
-                const toast = document.getElementById('toast');
-                toast.innerText = message;
-                
-                toast.classList.remove('bg-red-600', 'bg-blue-600', 'bg-green-600');
-                if (color === 'red') toast.classList.add('bg-red-600');
-                if (color === 'blue') toast.classList.add('bg-blue-600');
-                if (color === 'green') toast.classList.add('bg-green-600');
-
-                toast.classList.remove('opacity-0', 'translate-y-[-20px]');
-                
-                setTimeout(() => {
-                    toast.classList.add('opacity-0', 'translate-y-[-20px]');
-                }, 3000);
-            },
-
-            copyCode() {
-                if (!this.roomCode) return;
-                const el = document.createElement('textarea');
-                el.value = this.roomCode;
-                document.body.appendChild(el);
-                el.select();
-                try {
-                    document.execCommand('copy');
-                    this.showToast("Kód zkopírován!", "green");
-                } catch(e) {}
-                document.body.removeChild(el);
-            },
-
-            getAvatar(name) {
-                const emojis = ['🦊','🐼','🐸','🐱','🐶','🐰','🐯','🦁','🐮','🐷','🐵','🦉','🐙','🐢'];
-                // simple hash based on name
-                let hash = 0;
-                for (let i = 0; i < name.length; i++) {
-                    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-                }
-                const index = Math.abs(hash) % emojis.length;
-                return emojis[index];
-            }
-        };
-
-        // Expose app to global scope for HTML onclick handlers
-        window.app = app;
-
-        // Initialize when DOM is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            app.init();
+        qObj.a.forEach((ansText, idx) => {
+            const btn = document.createElement("button");
+            btn.className = `ans-btn ans-${idx}` + (myAnswered && me.answer === idx ? " selected" : "");
+            btn.disabled = myAnswered;
+            btn.innerHTML = `<span>${letters[idx]})</span> <span>${ansText}</span>`;
+            btn.onclick = () => submitAnswer(idx);
+            ansContainer.appendChild(btn);
         });
 
-    </script>
+        const gpContainer = document.getElementById("game-players");
+        gpContainer.innerHTML = "";
+        pList.forEach(p => {
+            const done = p.answeredRound === round;
+            const chip = document.createElement("div");
+            chip.className = "player-chip" + (done ? " answered" : "");
+            chip.innerText = (done ? "✓ " : "⏳ ") + p.name;
+            gpContainer.appendChild(chip);
+        });
+    }
+
+    else if (gameState.status === "results" || gameState.status === "finished") {
+        showScreen("screen-results");
+        const isFinished = gameState.status === "finished" || (gameState.round + 1 >= gameState.qIndices.length);
+        const qObj = QUESTIONS[gameState.qIndices[gameState.round]];
+
+        document.getElementById("results-title").innerText = isFinished ? "🏆 Konečné pořadí" : `Výsledky ${gameState.round + 1}. kola`;
+        document.getElementById("correct-answer-text").innerText = qObj.a[qObj.c];
+
+        const sorted = [...pList].sort((a, b) => (b.score || 0) - (a.score || 0));
+        const lb = document.getElementById("leaderboard");
+        lb.innerHTML = "";
+
+        sorted.forEach((p, idx) => {
+            const row = document.createElement("div");
+            row.className = "leaderboard-row" + (p.id === myId ? " me" : "");
+            const medal = idx === 0 ? "🥇 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : `${idx + 1}. `;
+            const answeredCorrectly = (p.answeredRound === gameState.round && p.answer === qObj.c);
+            row.innerHTML = `
+                <div>
+                    <strong>${medal}${p.name}</strong>
+                    <span style="font-size:0.8rem; color:var(--muted); margin-left:6px;">
+                        ${answeredCorrectly ? "(+100 b.)" : ""}
+                    </span>
+                </div>
+                <div style="font-weight:800; color:#818cf8;">${p.score || 0} b.</div>
+            `;
+            lb.appendChild(row);
+        });
+
+        document.getElementById("btn-next-round").classList.toggle("hidden", isFinished);
+        document.getElementById("btn-new-game").classList.toggle("hidden", !isFinished);
+    }
+}
+
+connectBroker();
+</script>
 </body>
 </html>
