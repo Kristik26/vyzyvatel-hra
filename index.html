@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Vědomostní Výzva</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
     <style>
         :root {
             --bg: #0f172a;
@@ -284,12 +284,12 @@
             <input type="text" id="player-name" placeholder="Např. Kristián" maxlength="16">
         </div>
 
-        <button id="btn-create" onclick="createRoom()" disabled>Vytvořit novou hru</button>
+        <button id="btn-create" onclick="createRoom()">Vytvořit novou hru</button>
 
         <div class="divider">NEBO SE PŘIPOJ</div>
 
         <input type="text" id="join-pin" class="pin-input" placeholder="PIN" maxlength="4" inputmode="numeric">
-        <button id="btn-join" class="secondary" onclick="joinRoom()" disabled>Připojit se ke hře</button>
+        <button id="btn-join" class="secondary" onclick="joinRoom()">Připojit se ke hře</button>
     </div>
 
     <!-- OBRAZOVKA 2: LOBBY -->
@@ -501,11 +501,13 @@ document.getElementById("db-count").innerText = QUESTIONS.length;
 
 const BROKERS = [
     "wss://broker.emqx.io:8084/mqtt",
-    "wss://broker.hivemq.com:8884/mqtt"
+    "wss://broker.hivemq.com:8884/mqtt",
+    "wss://test.mosquitto.org:8081/mqtt"
 ];
 
 let brokerIndex = 0;
 let client = null;
+let isConnected = false;
 let myId = localStorage.getItem("vv_pid") || "p_" + Math.random().toString(36).substring(2, 9);
 localStorage.setItem("vv_pid", myId);
 
@@ -516,32 +518,51 @@ let currentPin = null;
 let gameState = null;
 let players = {};
 let usedQuestions = [];
+let connectTimer = null;
 
 function connectBroker() {
+    if (client) {
+        try { client.end(true); } catch (e) {}
+    }
+
     const url = BROKERS[brokerIndex];
+    document.getElementById("conn-dot").className = "dot";
+    document.getElementById("conn-text").innerText = `Připojování k serveru (${brokerIndex + 1}/${BROKERS.length})...`;
+
+    clearTimeout(connectTimer);
+    connectTimer = setTimeout(() => {
+        if (!isConnected) {
+            tryNextBroker();
+        }
+    }, 4000);
+
     client = mqtt.connect(url, {
-        clientId: "vv_client_" + myId + "_" + Math.floor(Math.random() * 1000),
+        clientId: "vv_" + myId + "_" + Math.floor(Math.random() * 10000),
         clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 2000
+        connectTimeout: 4000,
+        reconnectPeriod: 3000
     });
 
     client.on("connect", () => {
+        isConnected = true;
+        clearTimeout(connectTimer);
         document.getElementById("conn-dot").className = "dot online";
         document.getElementById("conn-text").innerText = "Online – připraveno";
-        document.getElementById("btn-create").disabled = false;
-        document.getElementById("btn-join").disabled = false;
 
         if (currentPin) {
-            subscribeToRoom(currentPin);
+            subscribeToRoom(currentPin, () => {
+                if (gameState) publishGameState(gameState);
+                if (players[myId]) publishMyPlayer(players[myId]);
+            });
         }
     });
 
     client.on("error", () => {
-        TryNextBroker();
+        if (!isConnected) tryNextBroker();
     });
 
     client.on("offline", () => {
+        isConnected = false;
         document.getElementById("conn-dot").className = "dot";
         document.getElementById("conn-text").innerText = "Obnovování spojení...";
     });
@@ -556,19 +577,30 @@ function connectBroker() {
             const prefix = `vyzyvatel_cz_26/${currentPin}/`;
 
             if (topic === prefix + "game") {
-                gameState = data;
-                if (gameState.qIndices) {
-                    gameState.qIndices.forEach(idx => {
-                        if (!usedQuestions.includes(idx)) usedQuestions.push(idx);
-                    });
+                if (!gameState || !data.updatedAt || data.updatedAt >= (gameState.updatedAt || 0)) {
+                    gameState = data;
+                    if (gameState.qIndices) {
+                        gameState.qIndices.forEach(idx => {
+                            if (!usedQuestions.includes(idx)) usedQuestions.push(idx);
+                        });
+                    }
+                    renderUI();
                 }
-                renderUI();
+            } else if (topic === prefix + "sync") {
+                if (data.from !== myId) {
+                    if (gameState) publishGameState(gameState);
+                    if (players[myId]) publishMyPlayer(players[myId]);
+                }
             } else if (topic.startsWith(prefix + "players/")) {
                 const pid = topic.replace(prefix + "players/", "");
                 if (data.left) {
                     delete players[pid];
                 } else {
+                    const isNewPlayer = !players[pid];
                     players[pid] = data;
+                    if (isNewPlayer && pid !== myId && gameState) {
+                        publishGameState(gameState);
+                    }
                 }
                 checkAutoReveal();
                 renderUI();
@@ -579,12 +611,9 @@ function connectBroker() {
     });
 }
 
-function TryNextBroker() {
-    if (brokerIndex < BROKERS.length - 1) {
-        brokerIndex++;
-        if (client) client.end(true);
-        connectBroker();
-    }
+function tryNextBroker() {
+    brokerIndex = (brokerIndex + 1) % BROKERS.length;
+    connectBroker();
 }
 
 function saveName() {
@@ -598,23 +627,40 @@ function saveName() {
     return true;
 }
 
-function subscribeToRoom(pin) {
-    const prefix = `vyzyvatel_cz_26/${pin}/`;
-    client.subscribe(prefix + "game", { qos: 1 });
-    client.subscribe(prefix + "players/+", { qos: 1 });
+function subscribeToRoom(pin, callback) {
+    if (!client || !isConnected) {
+        if (callback) callback();
+        return;
+    }
+    const prefix = `vyzyvatel_cz_26/${pin}/#`;
+    client.subscribe(prefix, { qos: 1 }, () => {
+        if (callback) callback();
+    });
 }
 
 function publishGameState(state) {
     if (!currentPin) return;
-    client.publish(`vyzyvatel_cz_26/${currentPin}/game`, JSON.stringify(state), { qos: 1, retain: true });
+    gameState = state;
+    renderUI();
+    if (client && isConnected) {
+        client.publish(`vyzyvatel_cz_26/${currentPin}/game`, JSON.stringify(state), { qos: 1, retain: true });
+    }
 }
 
 function publishMyPlayer(extra = {}) {
     if (!currentPin) return;
     const current = players[myId] || { id: myId, name: myName, score: 0, answeredRound: -1, answer: null };
-    const updated = { ...current, name: myName, ...extra };
+    const updated = { ...current, id: myId, name: myName, ...extra };
     players[myId] = updated;
-    client.publish(`vyzyvatel_cz_26/${currentPin}/players/${myId}`, JSON.stringify(updated), { qos: 1, retain: true });
+    renderUI();
+    if (client && isConnected) {
+        client.publish(`vyzyvatel_cz_26/${currentPin}/players/${myId}`, JSON.stringify(updated), { qos: 1, retain: true });
+    }
+}
+
+function requestRoomSync() {
+    if (!currentPin || !client || !isConnected) return;
+    client.publish(`vyzyvatel_cz_26/${currentPin}/sync`, JSON.stringify({ from: myId, t: Date.now() }), { qos: 1 });
 }
 
 function getShuffledQuestionIndices(count = 15) {
@@ -638,8 +684,6 @@ function createRoom() {
     currentPin = pin;
     players = {};
 
-    subscribeToRoom(pin);
-
     const roundsCount = parseInt(document.getElementById("round-select").value) || 15;
     const initialGame = {
         pin: pin,
@@ -650,8 +694,15 @@ function createRoom() {
         updatedAt: Date.now()
     };
 
-    publishGameState(initialGame);
-    publishMyPlayer({ score: 0, answeredRound: -1, answer: null });
+    // Okamžité zobrazení čekárny v prohlížeči
+    gameState = initialGame;
+    players[myId] = { id: myId, name: myName, score: 0, answeredRound: -1, answer: null };
+    renderUI();
+
+    subscribeToRoom(pin, () => {
+        publishGameState(initialGame);
+        publishMyPlayer({ score: 0, answeredRound: -1, answer: null });
+    });
 }
 
 function changeRoundsCount(val) {
@@ -675,30 +726,30 @@ function joinRoom() {
     }
     currentPin = pin;
     players = {};
-    subscribeToRoom(pin);
-    publishMyPlayer({ score: 0, answeredRound: -1, answer: null });
 
-    setTimeout(() => {
-        if (!gameState) {
-            const fallbackGame = {
-                pin: pin,
-                status: "lobby",
-                round: 0,
-                roundsCount: 15,
-                qIndices: getShuffledQuestionIndices(15),
-                updatedAt: Date.now()
-            };
-            publishGameState(fallbackGame);
-        }
-    }, 1500);
+    // Okamžité přepnutí do čekárny, než dorazí data ze serveru
+    gameState = {
+        pin: pin,
+        status: "lobby",
+        round: 0,
+        roundsCount: 15,
+        qIndices: getShuffledQuestionIndices(15),
+        updatedAt: 0
+    };
+    players[myId] = { id: myId, name: myName, score: 0, answeredRound: -1, answer: null };
+    renderUI();
+
+    subscribeToRoom(pin, () => {
+        publishMyPlayer({ score: 0, answeredRound: -1, answer: null });
+        requestRoomSync();
+    });
 }
 
 function leaveRoom() {
-    if (currentPin) {
+    if (currentPin && client && isConnected) {
         const prefix = `vyzyvatel_cz_26/${currentPin}/`;
         client.publish(`${prefix}players/${myId}`, JSON.stringify({ left: true }), { qos: 1, retain: true });
-        client.unsubscribe(prefix + "game");
-        client.unsubscribe(prefix + "players/+");
+        client.unsubscribe(prefix + "#");
     }
     currentPin = null;
     gameState = null;
@@ -732,6 +783,7 @@ function submitAnswer(ansIndex) {
         answeredRound: gameState.round,
         answer: ansIndex
     });
+    checkAutoReveal();
 }
 
 function checkAutoReveal() {
@@ -747,7 +799,7 @@ function checkAutoReveal() {
                 if (gameState && gameState.status === "playing") {
                     revealResults();
                 }
-            }, 400);
+            }, 350);
         }
     }
 }
@@ -781,10 +833,12 @@ function nextRound() {
 
 function restartGame() {
     const count = (gameState && gameState.roundsCount) ? gameState.roundsCount : 15;
-    // Reset skóre všem aktivním hráčům
     Object.values(players).forEach(p => {
         const resetPlayer = { ...p, score: 0, answeredRound: -1, answer: null };
-        client.publish(`vyzyvatel_cz_26/${currentPin}/players/${p.id}`, JSON.stringify(resetPlayer), { qos: 1, retain: true });
+        players[p.id] = resetPlayer;
+        if (client && isConnected) {
+            client.publish(`vyzyvatel_cz_26/${currentPin}/players/${p.id}`, JSON.stringify(resetPlayer), { qos: 1, retain: true });
+        }
     });
 
     publishGameState({
@@ -833,7 +887,7 @@ function renderUI() {
         showScreen("screen-game");
         const round = gameState.round;
         const total = gameState.qIndices.length;
-        const qObj = QUESTIONS[gameState.qIndices[round]];
+        const qObj = QUESTIONS[gameState.qIndices[round]] || QUESTIONS[0];
 
         const answeredCount = pList.filter(p => p.answeredRound === round).length;
         document.getElementById("round-info").innerText = `Otázka ${round + 1} / ${total}`;
@@ -870,7 +924,7 @@ function renderUI() {
     else if (gameState.status === "results" || gameState.status === "finished") {
         showScreen("screen-results");
         const isFinished = gameState.status === "finished" || (gameState.round + 1 >= gameState.qIndices.length);
-        const qObj = QUESTIONS[gameState.qIndices[gameState.round]];
+        const qObj = QUESTIONS[gameState.qIndices[gameState.round]] || QUESTIONS[0];
 
         document.getElementById("results-title").innerText = isFinished ? "🏆 Konečné pořadí" : `Výsledky ${gameState.round + 1}. kola`;
         document.getElementById("correct-answer-text").innerText = qObj.a[qObj.c];
